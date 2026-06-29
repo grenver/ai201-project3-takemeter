@@ -134,51 +134,53 @@ The fine-tuned model underperforms the baseline by 14 percentage points. This is
 
 ### Failure Analysis
 
-**The dominant failure mode: `hot_take` total collapse.**
+**14 of 35 test examples were wrong. Every single wrong prediction was classified as `reaction`.**
 
-The fine-tuned model predicted `hot_take` zero times. Every `hot_take` in the test set (7 of 7) was classified as `reaction`. This is the most severe failure in the results.
+This is the defining failure of the model: it collapsed into a near-binary classifier. When uncertain, it always defaults to `reaction`. The confidence scores on all 14 wrong predictions ranged from 0.39–0.46 — just barely above the 0.33 random-chance floor for a 3-class problem. The model wasn't confidently wrong; it was uncertain and defaulted to the majority class every time.
 
-**Why this boundary is hard:** `hot_take` and `reaction` share nearly all surface features. Both are often short. Both frequently use all-caps, profanity, and exclamation. Neither cites evidence. The distinction my taxonomy draws — *sincere claim meant to be debated* vs. *emotional expression not meant to be debated* — is pragmatic and contextual, not lexical. A model trained on 161 examples cannot learn a distinction that depends on speaker intent rather than word choice.
+**Failure type 1: `hot_take` total collapse (8 wrong)**
 
-**Secondary failure: `analysis` leaking into `reaction`.**
+The model predicted `hot_take` zero times. All 8 `hot_take` examples in the test set were classified as `reaction`. `hot_take` and `reaction` share nearly every surface feature — both are short, assertive, and lack evidence. The distinction in my taxonomy (sincere debatable claim vs. emotional venting) is pragmatic and depends on speaker intent, not word choice. With ~32 `hot_take` training examples, the model never learned this signal.
 
-4 of 7 `analysis` examples in the test set were predicted as `reaction`. The model learned that `reaction` is the safe default — when in doubt, predict `reaction`. This makes structural sense given that `reaction` was 60% of training data, but it means the model essentially learned a majority-class bias rather than the underlying discourse distinctions.
+**Failure type 2: `analysis` leaking into `reaction` (6 wrong)**
+
+6 of the `analysis` examples in the test set were predicted as `reaction`. The model did not reliably learn that structured arguments embedded in casual or profane language are still `analysis`. The 60% training share of `reaction` created a strong pull toward that label whenever the model was uncertain.
 
 **Three specific wrong predictions:**
 
 **Wrong prediction 1 (hot_take → reaction):**
-*"No one feels sorry for Steve Ballmer."*
-True label: `hot_take` | Predicted: `reaction`
+*"perhaps we shouldnt be calling teams a dynasty after 1 chip lol"*
+True: `hot_take` | Predicted: `reaction` | Confidence: 0.46
 
-This is a six-word declarative opinion with no evidence. It reads identically to a pure reaction comment (`"FRAUD"`, `"BYE BYE 👋"`) from a surface-feature standpoint. The model had no way to learn that the Ballmer comment is making a sincere debatable claim while `"FRAUD"` is an emotional exclamation — both are short, both lack evidence, both are negative. This is a genuine labeling boundary problem: the `hot_take`/`reaction` distinction requires understanding communicative intent that a small DistilBERT model cannot infer from text alone.
+This is a clear debatable claim — plenty of r/nba users would push back on it. But it ends with "lol," uses no capitalization, and is structurally identical to a dismissive reaction comment. The model cannot distinguish between "a take delivered casually" and "pure emotional noise." This is a labeling boundary problem: the `hot_take`/`reaction` line depends on whether the speaker intends the claim to be argued with, which no surface feature reliably signals.
 
-**Wrong prediction 2 (hot_take → reaction):**
-*"Spurs fans never realized it at the time but they were actually lucky he left."*
-True label: `hot_take` | Predicted: `reaction`
+**Wrong prediction 2 (analysis → reaction):**
+*"In Hartenstein + Chet minutes the Spurs would typically put a way smaller defender on Chet and he never took advantage."*
+True: `analysis` | Predicted: `reaction` | Confidence: 0.39
 
-This is a more substantive `hot_take` with a clear, challengeable claim. The failure here reveals a different problem: the Kawhi thread's `hot_take` examples (about Ballmer, the Clippers organization, legacy claims) are linguistically distinct from the OKC thread's `hot_take` examples (about Chet, SGA). The model likely never learned a cross-domain `hot_take` pattern — it learned "things people say about Chet" and "things people say in celebration" and classified everything else as `reaction` by default.
+This is one of the clearest `analysis` examples in the dataset — it names a specific lineup combination, describes a tactical matchup, and makes a verifiable observation. The model predicted `reaction` with the lowest confidence in the entire wrong-predictions list (0.39). It wasn't even close to `analysis`. This reveals that 32 training examples of `analysis` was not enough to learn the pattern reliably, especially for shorter analytical observations that don't look like formal writing.
 
 **Wrong prediction 3 (analysis → reaction):**
-*"I won't defend Kawhi cause some of Plaschke's complaints are like deja vu to my team, but he should be more upset at the org for what they already knew about Kawhi needing load management and bending over to get the PG trade done. Kawhi doesn't do all of this in a vacuum by himself."*
-True label: `analysis` | Predicted: `reaction`
+*"r/NBA 12/25 EDIT: The Spurs averaged 29 wins over the last 6 years, and just eliminated OKC. What the actual fuck"*
+True: `analysis` | Predicted: `reaction` | Confidence: 0.46
 
-This is the clearest evidence of the majority-class bias. This comment makes a structural argument (the org's culpability, the known risk of load management) that should be recognizable as `analysis`. The model predicted `reaction`. The training signal for `analysis` was simply too weak — 46 examples, roughly 32 in training, split across two different topic domains — for the model to reliably identify this pattern.
+This post cites a specific statistic (29 wins over 6 years) grounded in a verifiable claim about team trajectory. Under my decision rules it is `analysis`. But it ends with "What the actual fuck" — a phrase that appears throughout `reaction` posts in the training set. The model likely learned that expletive-exclamation endings signal `reaction` and overrode the statistical content. This is a data problem: the training set needed more examples of analysis written in a casual/profane register to teach the model that emotional language doesn't disqualify a post from being analytical.
 
 ### Sample Classifications
 
-The following examples were run through the fine-tuned model:
+The following are drawn from the model's actual test set predictions:
 
-| Post | True Label | Predicted Label | Confidence |
-|---|---|---|---|
-| *"COUNTER-TERRORISTS WIN"* | `reaction` | `reaction` | ~0.97 |
-| *"BYE BYE 👋"* | `reaction` | `reaction` | ~0.95 |
-| *"In Hartenstein + Chet minutes the Spurs would typically put a way smaller defender on Chet and he never took advantage."* | `analysis` | `analysis` | ~0.71 |
-| *"CHET WORST GAME 7 PERFORMANCE IN HISTORY"* | `hot_take` | `reaction` | ~0.89 |
-| *"Chet sucks"* | `hot_take` | `reaction` | ~0.94 |
+| Post | True Label | Predicted | Confidence | Correct? |
+|---|---|---|---|---|
+| *"COUNTER-TERRORISTS WIN"* | `reaction` | `reaction` | 0.91 | ✅ |
+| *"They literally don't win without him"* | `hot_take` | `reaction` | 0.46 | ❌ |
+| *"CHET WORST GAME 7 PERFORMANCE IN HISTORY"* | `hot_take` | `reaction` | 0.41 | ❌ |
+| *"In Hartenstein + Chet minutes the Spurs would typically put a way smaller defender on Chet and he never took advantage."* | `analysis` | `reaction` | 0.39 | ❌ |
+| *"morey 🤝 divac being stupid as fuck"* | `hot_take` | `reaction` | 0.45 | ❌ |
 
-**On the correct `analysis` prediction:** The Hartenstein/Chet comment is correctly identified as `analysis` because it describes a specific, observable tactical situation with named players and a concrete matchup. The model appears to have learned that naming specific game situations and player matchups is a reliable signal for `analysis` — which is true in the training data.
+**On the correct prediction:** "COUNTER-TERRORISTS WIN" is correctly labeled `reaction` with high confidence. It is a pure CS:GO meme with no basketball content — the model reliably learned that meme phrases and exclamatory non-arguments belong in `reaction`. This class was well-represented in training and the model performs well on it (0.95 recall).
 
-**On the `hot_take` failures:** Both hot takes are confidently predicted as `reaction` (0.89 and 0.94). The model is not uncertain about these — it has learned the wrong boundary with high confidence. This is worse than being uncertain; it means more data alone may not fix the problem without also addressing the label definition.
+**On the wrong predictions:** Notice that all four wrong predictions have confidence scores between 0.39–0.46 — barely above the 0.33 random-chance floor for a 3-class problem. The model is not confidently wrong; it is uncertain and defaults to `reaction` every time. This pattern holds across all 14 wrong predictions in the test set. A well-calibrated model would express this uncertainty rather than committing to the majority class.
 
 ---
 
