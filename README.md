@@ -2,6 +2,10 @@
 
 A fine-tuned text classifier that evaluates discourse quality in r/nba, distinguishing structured analysis from bold unsupported takes from pure emotional reaction.
 
+## Demo Video
+
+[Watch the demo on Loom](https://www.loom.com/share/59c7c6d60ae849ff943849535c93c62f)
+
 ---
 
 ## Community Choice
