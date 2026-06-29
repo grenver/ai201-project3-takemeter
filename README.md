@@ -108,43 +108,43 @@ Comment: {text}
 | Model | Accuracy |
 |---|---|
 | Zero-shot baseline (llama-3.3-70b-versatile) | **80.0%** |
-| Fine-tuned DistilBERT | **65.7%** |
-| Difference | -14.3% |
+| Fine-tuned DistilBERT | **60.0%** |
+| Difference | -20.0% |
 
-The fine-tuned model underperforms the baseline by 14 percentage points. This is a significant regression and is explained in detail in the failure analysis below.
+The fine-tuned model underperforms the baseline by 20 percentage points. This is a significant regression and is explained in detail in the failure analysis below.
 
 ### Per-Class Metrics — Both Models
 
 | Label | Baseline Precision | Baseline Recall | Baseline F1 | Fine-tuned Precision | Fine-tuned Recall | Fine-tuned F1 |
 |---|---|---|---|---|---|---|
-| `analysis` | 1.00 | 0.43 | 0.60 | 0.75 | 0.43 | 0.55 |
+| `analysis` | 1.00 | 0.43 | 0.60 | — | 0.00 | 0.00 |
 | `hot_take` | 0.62 | 0.71 | 0.67 | — | 0.00 | 0.00 |
-| `reaction` | 0.83 | 0.95 | 0.89 | 0.65 | 0.95 | 0.77 |
-| **Macro avg** | **0.82** | **0.70** | **0.72** | — | — | **0.44** |
+| `reaction` | 0.83 | 0.95 | 0.89 | 0.60 | 1.00 | 0.75 |
+| **Macro avg** | **0.82** | **0.70** | **0.72** | — | — | **0.25** |
 
-*Fine-tuned `hot_take` precision is undefined — the model predicted this label zero times across the entire test set.*
+*Fine-tuned `analysis` and `hot_take` precision are undefined — the model predicted only `reaction` across all 35 test examples.*
 
 ### Confusion Matrix — Fine-Tuned Model
 
 |  | Predicted: analysis | Predicted: hot_take | Predicted: reaction |
 |---|---|---|---|
-| **True: analysis** | 3 | 0 | 4 |
+| **True: analysis** | 0 | 0 | 7 |
 | **True: hot_take** | 0 | 0 | 7 |
-| **True: reaction** | 1 | 0 | 20 |
+| **True: reaction** | 0 | 0 | 21 |
 
 ### Failure Analysis
 
-**14 of 35 test examples were wrong. Every single wrong prediction was classified as `reaction`.**
+**14 of 35 test examples were wrong. The model predicted `reaction` for every single test example — 35 out of 35.**
 
-This is the defining failure of the model: it collapsed into a near-binary classifier. When uncertain, it always defaults to `reaction`. The confidence scores on all 14 wrong predictions ranged from 0.39–0.46 — just barely above the 0.33 random-chance floor for a 3-class problem. The model wasn't confidently wrong; it was uncertain and defaulted to the majority class every time.
+This is a complete collapse into a single-class predictor. The fine-tuned model learned nothing about `analysis` or `hot_take` — it defaulted to `reaction` with 100% frequency, which is the majority class at 60% of the training data. The confidence scores on all wrong predictions ranged from 0.39–0.46, barely above the 0.33 random-chance floor for a 3-class problem. The model was not confidently wrong; it was uncertain every time and resolved that uncertainty the same way: predict `reaction`.
 
-**Failure type 1: `hot_take` total collapse (8 wrong)**
+**Failure type 1: `hot_take` complete miss (7 wrong)**
 
-The model predicted `hot_take` zero times. All 8 `hot_take` examples in the test set were classified as `reaction`. `hot_take` and `reaction` share nearly every surface feature — both are short, assertive, and lack evidence. The distinction in my taxonomy (sincere debatable claim vs. emotional venting) is pragmatic and depends on speaker intent, not word choice. With ~32 `hot_take` training examples, the model never learned this signal.
+The model predicted `hot_take` zero times. All 7 `hot_take` examples in the test set were classified as `reaction`. `hot_take` and `reaction` share nearly every surface feature — both are short, assertive, and lack evidence. The distinction in my taxonomy (sincere debatable claim vs. emotional venting) is pragmatic and depends on speaker intent, not word choice. With ~32 `hot_take` training examples, the model never learned this signal.
 
-**Failure type 2: `analysis` leaking into `reaction` (6 wrong)**
+**Failure type 2: `analysis` complete miss (7 wrong)**
 
-6 of the `analysis` examples in the test set were predicted as `reaction`. The model did not reliably learn that structured arguments embedded in casual or profane language are still `analysis`. The 60% training share of `reaction` created a strong pull toward that label whenever the model was uncertain.
+The model predicted `analysis` zero times. All 7 `analysis` examples were classified as `reaction`. The model did not learn that structured arguments embedded in casual or profane language are still `analysis`. The 60% training share of `reaction` created an overwhelming pull toward that label.
 
 **Three specific wrong predictions:**
 
